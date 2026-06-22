@@ -8,8 +8,8 @@
   center      <- center.jpg       中间大屏：征途回响 青春当歌
   left_outer  <- left_outer.jpg   左最外竖屏：矢志不渝听党话 跟党走 / 厚植爱国情怀
   left_inner  <- left_inner.jpg   左内侧竖屏：红金音符
-  right_inner <- right_inner.jpg  右内侧竖屏：强化思想引领 / 铸牢理想信念
-  right_outer <- right_outer.jpg  右最外竖屏：红金音符
+  right_inner <- right_outer.jpg  右内侧竖屏：红金音符
+  right_outer <- right_inner.jpg  右最外竖屏：强化思想引领 / 铸牢理想信念
 """
 import numpy as np
 import cv2
@@ -20,8 +20,8 @@ MAPPING = {
     "center":      "images/center.jpg",
     "left_outer":  "images/left_outer.jpg",
     "left_inner":  "images/left_inner.jpg",
-    "right_inner": "images/right_inner.jpg",
-    "right_outer": "images/right_outer.jpg",
+    "right_inner": "images/right_outer.jpg",
+    "right_outer": "images/right_inner.jpg",
 }
 NAMES = ["left_outer", "left_inner", "center", "right_inner", "right_outer"]
 
