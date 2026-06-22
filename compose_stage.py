@@ -16,12 +16,16 @@ import cv2
 from PIL import Image
 
 MAIN = "images/main.jpg"
-MAPPING = {
-    "center":      "images/center.jpg",
-    "left_outer":  "images/left_outer.jpg",
-    "left_inner":  "images/left_inner.jpg",
-    "right_inner": "images/right_outer.jpg",
-    "right_outer": "images/right_inner.jpg",
+
+# 中间三块屏（左内侧+中间+右内侧）作为一整块连续画面，统一铺 center.jpg，
+# 使飘带横跨三块屏连续对齐。
+CENTRAL = ["left_inner", "center", "right_inner"]
+CENTRAL_IMG = "images/center.jpg"
+
+# 左右最外侧的文字竖屏单独贴
+OUTER = {
+    "left_outer":  "images/left_outer.jpg",   # 矢志不渝听党话 跟党走 / 厚植爱国情怀
+    "right_outer": "images/right_inner.jpg",   # 强化思想引领 / 铸牢理想信念
 }
 NAMES = ["left_outer", "left_inner", "center", "right_inner", "right_outer"]
 
@@ -74,27 +78,47 @@ def expand_quad(q, e=EXPAND):
     return q + signs * e
 
 
+def paste(out, src_im, dst_quad, mask_polys):
+    """把 src_im 透视映射到 dst_quad，并按 mask_polys（多个多边形）合成到 out。"""
+    H, W = out.shape[:2]
+    h, w = src_im.shape[:2]
+    src = np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], dtype=np.float32)
+    M = cv2.getPerspectiveTransform(src, dst_quad.astype(np.float32))
+    warp = cv2.warpPerspective(src_im, M, (W, H), flags=cv2.INTER_LANCZOS4,
+                               borderMode=cv2.BORDER_REPLICATE)
+    mask = np.zeros((H, W), np.uint8)
+    for poly in mask_polys:
+        cv2.fillConvexPoly(mask, np.round(poly).astype(np.int32), 255, cv2.LINE_AA)
+    a = (mask.astype(np.float32) / 255.0)[..., None]
+    return (warp.astype(np.float32) * a + out.astype(np.float32) * (1 - a)).astype(np.uint8)
+
+
 def main():
     main_bgr = cv2.cvtColor(np.array(Image.open(MAIN).convert("RGB")),
                             cv2.COLOR_RGB2BGR)
     H, W = main_bgr.shape[:2]
     quads = detect_quads(main_bgr)
     out = main_bgr.copy()
-    for nm, path in MAPPING.items():
-        q = expand_quad(quads[nm])  # 向外扩张，盖住青色边框
+
+    # —— 中间三块屏：统一铺一张连续的 center.jpg ——
+    # 用三块屏的整体外接四边形作为映射目标，保证飘带横跨连续；
+    # 再用各屏自身（外扩后）的多边形作为蒙版，缝隙保持原样（深色接缝，符合多屏物理结构）。
+    pts = np.vstack([quads[n] for n in CENTRAL])
+    x0, y0 = pts[:, 0].min(), pts[:, 1].min()
+    x1, y1 = pts[:, 0].max(), pts[:, 1].max()
+    union = np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], dtype=np.float32)
+    union = expand_quad(union)
+    central_src = cv2.cvtColor(np.array(Image.open(CENTRAL_IMG).convert("RGB")),
+                               cv2.COLOR_RGB2BGR)
+    masks = [expand_quad(quads[n]) for n in CENTRAL]
+    out = paste(out, central_src, union, masks)
+
+    # —— 左右最外侧文字竖屏 ——
+    for nm, path in OUTER.items():
         src_im = cv2.cvtColor(np.array(Image.open(path).convert("RGB")),
                               cv2.COLOR_RGB2BGR)
-        h, w = src_im.shape[:2]
-        src = np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]],
-                       dtype=np.float32)
-        M = cv2.getPerspectiveTransform(src, q)
-        warp = cv2.warpPerspective(src_im, M, (W, H),
-                                   flags=cv2.INTER_LANCZOS4,
-                                   borderMode=cv2.BORDER_REPLICATE)
-        mask = np.zeros((H, W), np.uint8)
-        cv2.fillConvexPoly(mask, np.round(q).astype(np.int32), 255, cv2.LINE_AA)
-        a = (mask.astype(np.float32) / 255.0)[..., None]
-        out = (warp.astype(np.float32) * a + out.astype(np.float32) * (1 - a)).astype(np.uint8)
+        out = paste(out, src_im, expand_quad(quads[nm]), [expand_quad(quads[nm])])
+
     cv2.imwrite("output_result.jpg", out, [cv2.IMWRITE_JPEG_QUALITY, 98])
     print("已生成 output_result.jpg", out.shape)
 
