@@ -63,6 +63,17 @@ def detect_quads(main_bgr):
     return quads
 
 
+# 向外扩张的像素数：用于完全盖住屏幕原有的青色 LED 边框
+EXPAND = 8
+
+
+def expand_quad(q, e=EXPAND):
+    """把四边形按 [TL,TR,BR,BL] 顺序，沿各角的外侧方向扩张 e 像素。"""
+    q = np.array(q, dtype=np.float32)
+    signs = np.array([[-1, -1], [1, -1], [1, 1], [-1, 1]], dtype=np.float32)
+    return q + signs * e
+
+
 def main():
     main_bgr = cv2.cvtColor(np.array(Image.open(MAIN).convert("RGB")),
                             cv2.COLOR_RGB2BGR)
@@ -70,7 +81,7 @@ def main():
     quads = detect_quads(main_bgr)
     out = main_bgr.copy()
     for nm, path in MAPPING.items():
-        q = quads[nm]  # TL, TR, BR, BL
+        q = expand_quad(quads[nm])  # 向外扩张，盖住青色边框
         src_im = cv2.cvtColor(np.array(Image.open(path).convert("RGB")),
                               cv2.COLOR_RGB2BGR)
         h, w = src_im.shape[:2]
@@ -81,8 +92,7 @@ def main():
                                    flags=cv2.INTER_LANCZOS4,
                                    borderMode=cv2.BORDER_REPLICATE)
         mask = np.zeros((H, W), np.uint8)
-        cv2.fillConvexPoly(mask, q.astype(np.int32), 255)
-        mask = cv2.GaussianBlur(mask, (3, 3), 0)
+        cv2.fillConvexPoly(mask, np.round(q).astype(np.int32), 255, cv2.LINE_AA)
         a = (mask.astype(np.float32) / 255.0)[..., None]
         out = (warp.astype(np.float32) * a + out.astype(np.float32) * (1 - a)).astype(np.uint8)
     cv2.imwrite("output_result.jpg", out, [cv2.IMWRITE_JPEG_QUALITY, 98])
